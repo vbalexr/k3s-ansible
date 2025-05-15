@@ -1,0 +1,30 @@
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: default-l2advertisement
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - public-pool
+  - private-pool
+  interfaces:
+  - {{ metal_lb_iface  }}
+---
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: public-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - {{ metal_lb_public_range }}
+---
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: private-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - {{ metal_lb_private_range }}
+  autoAssign: false
