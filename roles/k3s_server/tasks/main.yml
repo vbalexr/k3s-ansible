@@ -55,7 +55,11 @@
         dest: "/etc/rancher/k3s/config.yaml"
         mode: "0644"
       register: _server_config_result
-
+- name: Copy kubevip
+  when: inventory_hostname == groups[server_group][0] or ansible_host == groups[server_group][0]
+  block:
+    - name: Deploy vip manifest
+      ansible.builtin.include_tasks: vip.yml
 - name: Init first server node
   when: inventory_hostname == groups[server_group][0] or ansible_host == groups[server_group][0]
   block:
@@ -124,7 +128,7 @@
     - name: Pause to allow first server startup
       when: (groups[server_group] | length) > 1
       ansible.builtin.pause:
-        seconds: 10
+        seconds: 30
 
     - name: Check whether kubectl is installed on control node
       ansible.builtin.command: 'kubectl'
@@ -157,7 +161,7 @@
 
         - name: Change server address in kubeconfig on control node
           ansible.builtin.shell: |
-            KUBECONFIG={{ kubeconfig }} kubectl config set-cluster default --server=https://{{ api_endpoint }}:{{ api_port }}
+            KUBECONFIG={{ kubeconfig }} kubectl config set-cluster default --server=https://{{ kube_vip_access_ip }}:{{ api_port }}
           delegate_to: 127.0.0.1
           become: false
           register: csa_result
@@ -201,7 +205,7 @@
         - name: Store Master node-token
           ansible.builtin.set_fact:
             token: "{{ node_token.content | b64decode | regex_replace('\n', '') }}"
-
+    
 - name: Start other server if any and verify status
   when:
     - (groups[server_group] | length) > 1
@@ -271,8 +275,15 @@
       register: nodes
       until: nodes.rc == 0 and (nodes.stdout.split() | length) == (groups[server_group] | length)
       retries: 20
-      delay: 10
+      delay: 30
       changed_when: false
+
+- name: Deploy MetalLB
+  when: inventory_hostname == groups[server_group][0] or ansible_host == groups[server_group][0]
+  block:
+    - name: Deploy metallb manifest
+      ansible.builtin.include_tasks: metallb.yml
+      tags: metallb
 
 - name: Setup kubectl for user
   when: user_kubectl
@@ -305,3 +316,26 @@
         path: ~{{ ansible_user }}/.bashrc
         regexp: '\.\s+<\(kubectl completion bash\)'
         line: ". <(kubectl completion bash)  # Added by k3s-ansible"
+- name: Cleanup
+  block:
+    - name: Get contents of manifests folder
+      ansible.builtin.find:
+        paths: /var/lib/rancher/k3s/server/manifests
+        file_type: file
+      register: k3s_server_manifests
+
+    - name: Get sub dirs of manifests folder
+      ansible.builtin.find:
+        paths: /var/lib/rancher/k3s/server/manifests
+        file_type: directory
+      register: k3s_server_manifests_directories
+
+    - name: Remove manifests and folders that are only needed for bootstrapping cluster so k3s doesn't auto apply on start
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      with_items:
+        - "{{ k3s_server_manifests.files }}"
+        - "{{ k3s_server_manifests_directories.files }}"
+      loop_control:
+        label: "{{ item.path }}"
