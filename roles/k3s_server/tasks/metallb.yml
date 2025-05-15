@@ -32,6 +32,10 @@
     cmd: |
       kubectl apply -f /tmp/metallb-crds.yaml
       
+- name: Pause till CRDs are ready
+  ansible.builtin.pause:
+    seconds: 10
+
 - name: Set MetalLB config
   ansible.builtin.shell:
     cmd: |
