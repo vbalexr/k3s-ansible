@@ -3,30 +3,60 @@ k3s_cluster:
   children:
     server:
       hosts:
-        192.16.35.11:
+        10.1.10.6:
+        10.1.10.7:
+        10.1.10.8:
     agent:
       hosts:
-        192.16.35.12:
-        192.16.35.13:
 
   # Required Vars
   vars:
+    
     ansible_port: 22
     ansible_user: debian
-    k3s_version: v1.30.2+k3s1
+    k3s_version: v1.33.0+k3s1
+
+    # KubeVIP configuration
+    kube_vip_cluster_iface: br0
+    kube_vip_cluster_ip: 10.100.100.1
+    kube_vip_access_iface: bond0
+    kube_vip_access_ip: 10.1.10.5
+    kube_vip_cloud_provider_tag_version: main
+    kube_vip_tag_version: v0.9.1
+    cluster_cidr: 10.100.100.1/29
+
+    # MetalLB configuration
+    metal_lb_controller_tag_version: v0.14.9
+    metal_lb_speaker_tag_version: v0.14.9
+    metal_lb_type: native
+    metal_lb_iface: vlan12
+    metal_lb_public_range: 10.1.12.129/25
+    metal_lb_private_range: 10.1.12.2/25
+
     # The token should be a random string of reasonable length. You can generate
     # one with the following commands:
     # - openssl rand -base64 64
     # - pwgen -s 64 1
-    # You can use ansible-vault to encrypt this value / keep it secret.
-    # Or you can omit it if not using Vagrant and let the first server automatically generate one.
-    token: "changeme!"
-    api_endpoint: "{{ hostvars[groups['server'][0]]['ansible_host'] | default(groups['server'][0]) }}"
+    token: "!!!!CHANGE ME!!!!"
+    api_endpoint: "{{ hostvars[groups['server'][0]]['kube_vip_cluster_ip'] }}"
+
+    extra_server_args: >-
+      --node-ip {{ ansible_facts[kube_vip_cluster_iface]['ipv4']['address'] }}
+      --tls-san {{ kube_vip_cluster_ip }}
+      --tls-san {{ kube_vip_access_ip }}
+      --disable servicelb
+      --disable traefik
+      --kube-controller-manager-arg bind-address=0.0.0.0 
+      --kube-proxy-arg metrics-bind-address=0.0.0.0 
+      --kube-scheduler-arg bind-address=0.0.0.0 
+      --etcd-expose-metrics true 
+      --kubelet-arg containerd=/run/k3s/containerd/containerd.sock
+      --flannel-iface {{ kube_vip_cluster_iface }}
 
     # Optional vars
     # extra_server_args: ""
     # extra_agent_args: ""
-    # cluster_context: k3s-ansible
+    cluster_context: magi
     # api_port: 6443
     # k3s_server_location: /var/lib/rancher/k3s
     # systemd_dir: /etc/systemd/system
