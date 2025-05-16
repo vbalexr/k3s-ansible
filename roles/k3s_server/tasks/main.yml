@@ -278,17 +278,9 @@
       delay: 30
       changed_when: false
 
-- name: Deploy MetalLB
-  when: inventory_hostname == groups[server_group][0] or ansible_host == groups[server_group][0]
-  block:
-    - name: Deploy metallb manifest
-      ansible.builtin.include_tasks: metallb.yml
-      tags: metallb
-
 - name: Setup kubectl for user
   when: user_kubectl
   block:
-
     - name: Create directory .kube
       ansible.builtin.file:
         path: ~{{ ansible_user }}/.kube
